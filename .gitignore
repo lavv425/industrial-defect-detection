@@ -1,0 +1,10 @@
+dataset/
+processed_dataset/
+models/
+outputs/
+.venv/
+__pycache__/
+*.pkl
+*.pth
+
+.DS_Store
