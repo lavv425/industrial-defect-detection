@@ -1,0 +1,15 @@
+.git
+.gitignore
+
+.venv
+__pycache__
+
+dataset
+processed_dataset
+
+outputs
+
+frontend
+notebooks
+
+*.pyc

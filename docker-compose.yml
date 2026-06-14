@@ -1,0 +1,12 @@
+services:
+  industrial-defect-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: industrial-defect-api
+
+    ports:
+      - "8000:8000"
+
+    restart: unless-stopped
