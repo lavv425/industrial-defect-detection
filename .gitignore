@@ -3,6 +3,8 @@ processed_dataset/
 models/
 outputs/
 .venv/
+.cache/
+tmp/
 __pycache__/
 *.pkl
 *.pth
