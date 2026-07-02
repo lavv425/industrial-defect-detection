@@ -15,8 +15,8 @@ def predict_uploaded_image(file_bytes: bytes, filename: str):
         temp_file.write(file_bytes)
         temp_path = temp_file.name
 
-    result = predict(temp_path)
-
-    Path(temp_path).unlink(missing_ok=True)
-
-    return result
+    try:
+        return predict(temp_path)
+    finally:
+        # remove temp file, no mem leak
+        Path(temp_path).unlink(missing_ok=True)
