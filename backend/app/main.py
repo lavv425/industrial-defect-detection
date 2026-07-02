@@ -1,12 +1,28 @@
-from fastapi import FastAPI, UploadFile, File
+from contextlib import asynccontextmanager
+
+from fastapi import APIRouter, Depends, FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.inference import predict_uploaded_image
+from computer_vision.predict import load_model
+
+from backend.app.constants.routes import API_NAMESPACE_PREFIX, HEALTH_ROUTE, PREDICT_ROUTE
+from backend.app.inference import analyze_image
+from backend.app.schemas.prediction import PredictResponse
 from backend.app.validation import validate_upload
-from backend.app.constants.routes import HEALTH_ROUTE, PREDICT_ROUTE
 
-app = FastAPI(title="Industrial Defect Detection API", version="1.0.0")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # load model once, not per-request
+    app.state.model, app.state.device = load_model()
+    yield
+
+
+app = FastAPI(
+    title="Industrial Defect Detection API", version="1.0.0", lifespan=lifespan
+)
+
+# TODO: update for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,27 +31,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+router = APIRouter(prefix=API_NAMESPACE_PREFIX)
 
-@app.get(HEALTH_ROUTE)
+
+def get_model(request: Request):
+    """Dependency exposing the model loaded at startup."""
+    return request.app.state.model, request.app.state.device
+
+
+@router.get(HEALTH_ROUTE)
 def health():
     return {
         "status": True,
         "message": "API up n'running",
+        "data": None,
     }
 
 
-@app.post(PREDICT_ROUTE)
-async def predict(file: UploadFile = File(...)):
+@router.post(PREDICT_ROUTE, response_model=PredictResponse)
+async def predict(file: UploadFile = File(...), model_device=Depends(get_model)):
     file_bytes = await file.read()
 
     validate_upload(file, file_bytes)
 
-    result = predict_uploaded_image(
-        file_bytes=file_bytes,
-        filename=file.filename or "image.png",
-    )
+    model, device = model_device
+    result = analyze_image(model, device, file_bytes)
 
-    return {
-        "status": True,
-        "data": result,
-    }
+    return PredictResponse(data=result)
+
+
+app.include_router(router)
