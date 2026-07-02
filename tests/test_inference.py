@@ -1,56 +1,59 @@
-from pathlib import Path
+import base64
+import io
 
-import pytest
+import numpy as np
+from PIL import Image
 
 from backend.app import inference
 
 
-def test_forwards_bytes_and_suffix_then_cleans_up(monkeypatch):
-    seen = {}
-
-    def fake_predict(path: str):
-        seen["path"] = path
-        seen["suffix"] = Path(path).suffix
-        seen["exists_during"] = Path(path).exists()
-        seen["content"] = Path(path).read_bytes()
-        return {"prediction": "good"}
-
-    monkeypatch.setattr(inference, "predict", fake_predict)
-
-    result = inference.predict_uploaded_image(b"raw-bytes", "sample.jpg")
-
-    assert result == {"prediction": "good"}
-    assert seen["suffix"] == ".jpg"
-    assert seen["exists_during"] is True
-    assert seen["content"] == b"raw-bytes"
-    # temp file removed after a prediction
-    assert not Path(seen["path"]).exists()
+def make_image_bytes() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), color=(10, 20, 30)).save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
-def test_defaults_suffix_when_filename_has_none(monkeypatch):
-    seen = {}
+def test_good_prediction_has_no_gradcam(monkeypatch):
+    calls = {"overlay": 0}
 
-    def fake_predict(path: str):
-        seen["suffix"] = Path(path).suffix
-        return {}
+    monkeypatch.setattr(
+        inference, "run_prediction", lambda m, d, img: ("good", 0.95)
+    )
 
-    monkeypatch.setattr(inference, "predict", fake_predict)
+    def spy_overlay(*args, **kwargs):
+        calls["overlay"] += 1
+        return np.zeros((4, 4, 3), dtype=np.uint8)
 
-    inference.predict_uploaded_image(b"x", "no_extension")
-    assert seen["suffix"] == ".png"
+    monkeypatch.setattr(inference, "generate_overlay", spy_overlay)
+
+    result = inference.analyze_image(None, None, make_image_bytes())
+
+    assert result.prediction == "good"
+    assert result.confidence == 0.95
+    assert result.gradcam is None
+
+    assert calls["overlay"] == 0
 
 
-def test_temp_file_removed_even_when_predict_raises(monkeypatch):
-    captured = {}
+def test_defective_prediction_returns_gradcam_data_uri(monkeypatch):
+    monkeypatch.setattr(
+        inference, "run_prediction", lambda m, d, img: ("defective", 0.88)
+    )
+    monkeypatch.setattr(
+        inference,
+        "generate_overlay",
+        lambda m, d, img: np.full((8, 8, 3), 200, dtype=np.uint8),
+    )
 
-    def failing_predict(path: str):
-        captured["path"] = path
-        raise RuntimeError("model blew up")
+    result = inference.analyze_image(None, None, make_image_bytes())
 
-    monkeypatch.setattr(inference, "predict", failing_predict)
+    assert result.prediction == "defective"
+    assert result.gradcam is not None
+    assert result.gradcam.startswith("data:image/png;base64,")
 
-    with pytest.raises(RuntimeError, match="model blew up"):
-        inference.predict_uploaded_image(b"x", "sample.png")
-
-    # temp file removed after a prediction
-    assert not Path(captured["path"]).exists()
+    # base64 payload must decode into a valid PNG
+    payload = result.gradcam.split(",", 1)[1]
+    decoded = base64.b64decode(payload)
+    with Image.open(io.BytesIO(decoded)) as overlay_img:
+        assert overlay_img.format == "PNG"
+        assert overlay_img.size == (8, 8)
