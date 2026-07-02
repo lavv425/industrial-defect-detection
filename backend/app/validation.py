@@ -56,7 +56,7 @@ def _validate_size(file_bytes: bytes) -> None:
         )
     if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
                 f"File too large ({len(file_bytes)} bytes). "
                 f"Max allowed: {MAX_UPLOAD_SIZE_BYTES} bytes."
@@ -74,7 +74,7 @@ def _validate_decodable(file_bytes: bytes) -> None:
             width, height = image.size
             if width * height > MAX_IMAGE_PIXELS:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                     detail=(
                         f"Image resolution too large ({width}x{height}). "
                         f"Max allowed: {MAX_IMAGE_PIXELS} pixels."
