@@ -14,6 +14,15 @@ IDX_TO_CLASS = {
     1: "good",
 }
 
+TRANSFORM = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    ),
+])
+
 
 def get_device():
     if torch.backends.mps.is_available():
@@ -40,11 +49,16 @@ def build_model():
     return model
 
 
-def predict(image_path: str):
-    device = get_device()
+def load_model(model_path: Path = MODEL_PATH, device: torch.device | None = None):
+    """Build the network, load the trained weights and put it in eval mode.
+
+    Call this ONCE and reuse the returned model - loading the checkpoint is
+    expensive and must not happen on every request.
+    """
+    device = device or get_device()
 
     checkpoint = torch.load(
-        MODEL_PATH,
+        model_path,
         map_location=device,
         weights_only=False,
     )
@@ -54,17 +68,14 @@ def predict(image_path: str):
     model.to(device)
     model.eval()
 
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225],
-        ),
-    ])
+    return model, device
 
-    image = Image.open(image_path).convert("RGB")
-    input_tensor = transform(image).unsqueeze(0).to(device)
+
+def run_prediction(model, device: torch.device, image: Image.Image) -> tuple[str, float]:
+    """Run a forward pass on an already-loaded model and return
+    (prediction, confidence). No disk I/O, no checkpoint loading.
+    """
+    input_tensor = TRANSFORM(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         outputs = model(input_tensor)
@@ -73,10 +84,21 @@ def predict(image_path: str):
 
     prediction = IDX_TO_CLASS[int(predicted_idx.item())]
 
+    return prediction, float(confidence.item())
+
+
+def predict(image_path: str):
+    """Self-contained one-shot prediction for CLI use. Loads the model each
+    call - fine for a script, not for the API (see load_model docstring).
+    """
+    model, device = load_model()
+    image = Image.open(image_path).convert("RGB")
+    prediction, confidence = run_prediction(model, device, image)
+
     return {
         "image": image_path,
         "prediction": prediction,
-        "confidence": float(confidence.item()),
+        "confidence": confidence,
         "model": "resnet50",
     }
 
