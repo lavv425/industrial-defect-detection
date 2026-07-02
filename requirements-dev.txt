@@ -1,0 +1,5 @@
+# Dev deps (not needed at runtime)
+# pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8.0
