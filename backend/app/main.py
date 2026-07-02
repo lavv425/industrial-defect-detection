@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.inference import predict_uploaded_image
 from backend.app.validation import validate_upload
-from backend.app.constants.routes import HEALT_ROUTE, PREDICT_ROUTE
+from backend.app.constants.routes import HEALTH_ROUTE, PREDICT_ROUTE
 
 app = FastAPI(title="Industrial Defect Detection API", version="1.0.0")
 
@@ -16,7 +16,7 @@ app.add_middleware(
 )
 
 
-@app.get(HEALT_ROUTE)
+@app.get(HEALTH_ROUTE)
 def health():
     return {
         "status": True,

@@ -1,2 +1,2 @@
-HEALT_ROUTE = "/health"
+HEALTH_ROUTE = "/health"
 PREDICT_ROUTE = "/predict"
